@@ -28,6 +28,8 @@
   <!-- JsBarcode and QRCode (UMD) -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <!-- Fallback QR library -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -164,22 +166,48 @@
         els.svg.style.display='none';
         els.qrHolder.style.display='block';
         const margin = Math.max(0, parseInt(els.margin.value||0,10));
-        const opts = {
-          type: 'svg',
-          margin: Math.round(margin/2),
-          color: { dark: els.fg.value, light: els.bg.value },
-          errorCorrectionLevel: 'M',
-        };
-        QRCode.toString(val || ' ', opts, function (e, str){
-          if(e){ els.error.textContent = 'Fehler beim Erzeugen des QR-Codes.'; els.error.style.display='block'; return; }
-          // Safari/iPad: safer to parse SVG via DOMParser instead of innerHTML
+        const fg = els.fg.value; const bg = els.bg.value;
+        const valSafe = val || ' ';
+        els.qrHolder.innerHTML = '';
+        
+        // Try robust SVG generation using qrcode-generator (works well on Safari/iPad)
+        try {
+          const qr = window.qrcode(0, 'M');
+          qr.addData(valSafe);
+          qr.make();
+          const count = qr.getModuleCount();
+          const cell = 4; // px per module
+          const size = count * cell + margin * 2;
+          // Build SVG string manually for maximum compatibility
+          let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
+          svg += `<rect width="100%" height="100%" fill="${bg}"/>`;
+          for (let r=0; r<count; r++) {
+            for (let c=0; c<count; c++) {
+              if (qr.isDark(r, c)) {
+                const x = margin + c*cell;
+                const y = margin + r*cell;
+                svg += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${fg}"/>`;
+              }
+            }
+          }
+          svg += `</svg>`;
           const parser = new DOMParser();
-          const doc = parser.parseFromString(str, 'image/svg+xml');
-          const svgEl = doc.documentElement;
-          // Clear and inject
-          els.qrHolder.innerHTML = '';
-          els.qrHolder.appendChild(svgEl);
-        });
+          const doc = parser.parseFromString(svg, 'image/svg+xml');
+          els.qrHolder.appendChild(doc.documentElement);
+        } catch (e) {
+          // Fallback to qrcode (toString) if available
+          if (window.QRCode && window.QRCode.toString) {
+            const opts = { type: 'svg', margin: Math.round(margin/2), color: { dark: fg, light: bg }, errorCorrectionLevel: 'M' };
+            window.QRCode.toString(valSafe, opts, function (err, str){
+              if(err){ els.error.textContent = 'Fehler beim Erzeugen des QR-Codes.'; els.error.style.display='block'; return; }
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(str, 'image/svg+xml');
+              els.qrHolder.appendChild(doc.documentElement);
+            });
+          } else {
+            els.error.textContent = 'QR-Bibliothek nicht verfügbar.'; els.error.style.display='block';
+          }
+        }
         return;
       }
 
