@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Barcode → SVG (Standalone)</title>
+  <style>
+    :root{--bg:#f7f7fb;--card:#ffffff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--accent:#2563eb}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:linear-gradient(180deg,var(--bg),#fff)}
+    .container{max-width:1000px;margin:0 auto;padding:24px}
+    .grid{display:grid;gap:16px}
+    @media (min-width:900px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 4px 16px rgba(0,0,0,.04)}
+    .card h2{margin:0;padding:18px 20px;border-bottom:1px solid var(--border)}
+    .card .content{padding:18px 20px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="text"], select, input[type="number"], input[type="color"]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+    .btn.secondary{background:#eef2ff;color:#1d4ed8}
+    .hint{font-size:12px;color:var(--muted)}
+    .preview{display:flex;align-items:center;justify-content:center;border:1px dashed var(--border);border-radius:14px;background:#fff;padding:24px;min-height:240px;overflow:auto}
+    .stack{display:grid;gap:12px}
+    .footer{font-size:12px;color:var(--muted);margin-top:8px}
+  </style>
+  <!-- JsBarcode and QRCode (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1 style="margin:0 0 12px">Barcode → SVG Generator (Standalone)</h1>
+    <p class="hint" style="margin-top:0">Läuft vollständig im Browser – ideal für iPad/Safari. SVG kann heruntergeladen oder in andere Apps geteilt werden.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Einstellungen</h2>
+        <div class="content stack">
+          <div>
+            <label for="value">Inhalt</label>
+            <input id="value" type="text" placeholder="Wert eingeben…" value="401234567890" />
+            <div id="error" class="hint" style="color:#dc2626;margin-top:6px;display:none"></div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="symbology">Symbologie</label>
+              <select id="symbology">
+                <option value="CODE128">CODE128 (universell)</option>
+                <option value="CODE39">CODE39</option>
+                <option value="EAN13">EAN-13</option>
+                <option value="EAN8">EAN-8</option>
+                <option value="UPC">UPC-A</option>
+                <option value="ITF14">ITF-14</option>
+                <option value="ITF">Interleaved 2 of 5 (ITF)</option>
+                <option value="QR">QR-Code (2D)</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:end;gap:8px">
+              <button id="random" class="btn secondary" type="button">🔀 Beispielwert</button>
+            </div>
+          </div>
+
+          <div id="linear-opts" class="row">
+            <div>
+              <label for="width">Strichbreite (px)</label>
+              <input id="width" type="number" min="1" max="6" step="1" value="2" />
+            </div>
+            <div>
+              <label for="height">Höhe (px)</label>
+              <input id="height" type="number" min="40" max="180" step="2" value="100" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="margin">Rand (px)</label>
+              <input id="margin" type="number" min="0" max="40" step="1" value="10" />
+            </div>
+            <div class="row" style="grid-template-columns:1fr 1fr; gap:8px">
+              <div>
+                <label for="fg">Vordergrund</label>
+                <input id="fg" type="color" value="#000000" />
+              </div>
+              <div>
+                <label for="bg">Hintergrund</label>
+                <input id="bg" type="color" value="#ffffff" />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button id="download" class="btn" type="button">⬇️ Als SVG herunterladen</button>
+          </div>
+
+          <div class="footer">Hinweis: EAN/UPC erfordern nur Ziffern. ITF benötigt eine <b>gerade</b> Anzahl Ziffern.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Vorschau</h2>
+        <div class="content">
+          <div class="preview">
+            <svg id="barcode-svg" class="svg-preview" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div id="qr-holder" style="display:none"></div>
+          </div>
+          <div class="footer">Tipp: In iPad Safari erscheint beim Download ein Pfeil-Symbol in der Toolbar. Darüber findest du die gespeicherte SVG in „Downloads“.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const els = {
+      value: document.getElementById('value'),
+      sym: document.getElementById('symbology'),
+      width: document.getElementById('width'),
+      height: document.getElementById('height'),
+      margin: document.getElementById('margin'),
+      fg: document.getElementById('fg'),
+      bg: document.getElementById('bg'),
+      svg: document.getElementById('barcode-svg'),
+      qrHolder: document.getElementById('qr-holder'),
+      error: document.getElementById('error'),
+      random: document.getElementById('random'),
+      download: document.getElementById('download'),
+      linearOpts: document.getElementById('linear-opts'),
+    };
+
+    function validate(sym, val){
+      const digits = /^\d+$/;
+      if(sym==='EAN13'){
+        if(!digits.test(val)) return 'EAN-13 benötigt nur Ziffern.';
+        if(!(val.length===12||val.length===13)) return 'EAN-13 benötigt 12 oder 13 Ziffern.';
+      }
+      if(sym==='EAN8'){
+        if(!digits.test(val)) return 'EAN-8 benötigt nur Ziffern.';
+        if(!(val.length===7||val.length===8)) return 'EAN-8 benötigt 7 oder 8 Ziffern.';
+      }
+      if(sym==='UPC'){
+        if(!digits.test(val)) return 'UPC-A benötigt nur Ziffern.';
+        if(!(val.length===11||val.length===12)) return 'UPC-A benötigt 11 oder 12 Ziffern.';
+      }
+      if(sym==='ITF'){
+        if(!digits.test(val)) return 'Interleaved 2 of 5 (ITF) benötigt nur Ziffern.';
+        if(val.length % 2 !== 0) return 'ITF benötigt eine gerade Anzahl an Ziffern.';
+      }
+      return null;
+    }
+
+    function render(){
+      const sym = els.sym.value;
+      const val = els.value.value.trim();
+      const err = validate(sym, val);
+      if(err){ els.error.textContent = err; els.error.style.display='block'; }
+      else { els.error.style.display='none'; }
+      
+      // switch option visibility
+      els.linearOpts.style.display = (sym==='QR')? 'none' : 'grid';
+
+      if(sym==='QR'){
+        els.svg.style.display='none';
+        els.qrHolder.style.display='block';
+        const margin = Math.max(0, parseInt(els.margin.value||0,10));
+        const opts = {
+          type: 'svg',
+          margin: Math.round(margin/2),
+          color: { dark: els.fg.value, light: els.bg.value },
+          errorCorrectionLevel: 'M',
+        };
+        QRCode.toString(val || ' ', opts, function (e, str){
+          if(e){ els.error.textContent = 'Fehler beim Erzeugen des QR-Codes.'; els.error.style.display='block'; return; }
+          els.qrHolder.innerHTML = str;
+        });
+        return;
+      }
+
+      // Linear barcodes via JsBarcode
+      els.qrHolder.style.display='none';
+      els.svg.style.display='block';
+      // Clean previous content
+      while(els.svg.firstChild) els.svg.removeChild(els.svg.firstChild);
+      try{
+        JsBarcode(els.svg, val || ' ', {
+          format: sym==='ITF14' ? 'ITF14' : (sym==='ITF' ? 'ITF' : sym),
+          lineColor: els.fg.value,
+          background: els.bg.value,
+          width: Math.max(1, parseInt(els.width.value||2,10)),
+          height: Math.max(30, parseInt(els.height.value||100,10)),
+          margin: Math.max(0, parseInt(els.margin.value||10,10)),
+          displayValue: true,
+          fontSize: 14,
+          font: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto',
+        });
+      }catch(ex){
+        els.error.textContent = 'Fehler beim Erzeugen des Barcodes.'; els.error.style.display='block';
+      }
+    }
+
+    function downloadSVG(){
+      const sym = els.sym.value;
+      if(sym==='QR'){
+        const svg = els.qrHolder.querySelector('svg');
+        if(!svg) return;
+        const xml = new XMLSerializer().serializeToString(svg);
+        const source = '<?xml version="1.0" encoding="UTF-8"?>\n' + (xml.includes('xmlns=')? xml : xml.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"'));
+        const blob = new Blob([source], {type:'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = sym+'-'+(els.value.value.trim()||'code')+'.svg';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        const svg = els.svg;
+        const xml = new XMLSerializer().serializeToString(svg);
+        const source = '<?xml version="1.0" encoding="UTF-8"?>\n' + (xml.includes('xmlns=')? xml : xml.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"'));
+        const blob = new Blob([source], {type:'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = els.sym.value+'-'+(els.value.value.trim()||'code')+'.svg';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    function randomize(){
+      const sym = els.sym.value;
+      function digits(n){ return Array.from({length:n}, ()=> Math.floor(Math.random()*10)).join(''); }
+      if(sym==='QR' || sym==='CODE128' || sym==='CODE39'){
+        els.value.value = Math.random().toString(36).slice(2,12).toUpperCase();
+      } else if(sym==='EAN13'){
+        els.value.value = digits(12);
+      } else if(sym==='EAN8'){
+        els.value.value = digits(7);
+      } else if(sym==='UPC'){
+        els.value.value = digits(11);
+      } else if(sym==='ITF14'){
+        els.value.value = digits(13);
+      } else if(sym==='ITF'){
+        els.value.value = digits(10); // even length
+      }
+      render();
+    }
+
+    // Event listeners
+    [els.value, els.sym, els.width, els.height, els.margin, els.fg, els.bg].forEach(el=>{
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+    els.download.addEventListener('click', downloadSVG);
+    els.random.addEventListener('click', randomize);
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
