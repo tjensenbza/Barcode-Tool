@@ -172,7 +172,13 @@
         };
         QRCode.toString(val || ' ', opts, function (e, str){
           if(e){ els.error.textContent = 'Fehler beim Erzeugen des QR-Codes.'; els.error.style.display='block'; return; }
-          els.qrHolder.innerHTML = str;
+          // Safari/iPad: safer to parse SVG via DOMParser instead of innerHTML
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(str, 'image/svg+xml');
+          const svgEl = doc.documentElement;
+          // Clear and inject
+          els.qrHolder.innerHTML = '';
+          els.qrHolder.appendChild(svgEl);
         });
         return;
       }
